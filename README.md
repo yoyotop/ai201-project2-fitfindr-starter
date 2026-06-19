@@ -1,130 +1,197 @@
-# FitFindr — Starter Kit
+# FitFindr
 
-This starter kit contains everything you need to begin Project 2.
-
-## What's Included
-
-```
-ai201-project2-fitfindr-starter/
-├── data/
-│   ├── listings.json          # 40 mock secondhand listings
-│   └── wardrobe_schema.json   # Wardrobe format + example wardrobe
-├── utils/
-│   └── data_loader.py         # Helper functions for loading the data
-├── planning.md                # Your planning template — fill this out first
-└── requirements.txt           # Python dependencies
-```
-
-## Setup
-
-**macOS / Linux:**
-```bash
-python -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
-```
-
-**Windows:**
-```bash
-python -m venv .venv
-source .venv/Scripts/activate
-pip install -r requirements.txt
-```
-
-Set your Groq API key in a `.env` file (get a free key at [console.groq.com](https://console.groq.com)):
-```
-GROQ_API_KEY=your_key_here
-```
-
-## The Mock Listings Dataset
-
-`data/listings.json` contains 40 mock secondhand listings across categories (tops, bottoms, outerwear, shoes, accessories) and styles (vintage, y2k, grunge, cottagecore, streetwear, and more).
-
-Each listing has: `id`, `title`, `description`, `category`, `style_tags`, `size`, `condition`, `price`, `colors`, `brand`, and `platform`.
-
-Load it with:
-```python
-from utils.data_loader import load_listings
-listings = load_listings()
-```
-
-## The Wardrobe Schema
-
-`data/wardrobe_schema.json` defines the format your agent uses to represent a user's existing wardrobe. It includes:
-
-- `schema`: field definitions for a wardrobe item
-- `example_wardrobe`: a sample wardrobe with 10 items you can use for testing
-- `empty_wardrobe`: a starting template for a new user
-
-Load an example wardrobe with:
-```python
-from utils.data_loader import get_example_wardrobe
-wardrobe = get_example_wardrobe()
-```
-
-## Tool Inventory
-
-Your README submission must document each tool's name, inputs, and return value. **These must exactly match your actual function signatures in `tools.py`.** Your documented interfaces will be checked against your actual function signatures in `tools.py` — if the parameter count or types contradict what's in the code, you may not receive full credit for that tool.
+FitFindr is an AI-powered thrift shopping assistant that helps users find secondhand clothing items, generate outfit ideas, and create shareable social media captions. The agent searches a mock listings dataset, selects the best match, suggests outfits using the user's wardrobe, and generates a fit card using an LLM.
 
 ---
 
-## Interaction Walkthrough
+# Tool Inventory
 
-<!-- Walk through a complete interaction step by step: natural language query → each tool call (and why) → final fit card.
-     Walk through this carefully — it's how graders follow your agent's reasoning without a live demo.
-     Use a specific example — do not leave this as a template. -->
+## search_listings(description: str, size: str | None = None, max_price: float | None = None) -> list[dict]
 
-**User query:**
+### Purpose
 
-**Step 1 — Tool called:**
-- Tool:
-- Input:
-- Why this tool:
-- Output:
+Searches the mock thrift listings dataset for items matching the user's description, size, and price requirements.
 
-**Step 2 — Tool called:**
-- Tool:
-- Input:
-- Why this tool:
-- Output:
+### Inputs
 
-**Step 3 — Tool called:**
-- Tool:
-- Input:
-- Why this tool:
-- Output:
+* description (str): Keywords describing the item being searched for.
+* size (str | None): Optional size filter.
+* max_price (float | None): Optional maximum price filter.
 
-**Final output to user:**
+### Output
+
+* Returns a list of listing dictionaries sorted by relevance.
+* Returns an empty list if no matches are found.
 
 ---
 
-## Error Handling and Fail Points
+## suggest_outfit(new_item: dict, wardrobe: dict) -> str
 
-<!-- For each tool, describe the specific failure mode and what your agent does in response.
-     This maps to the error handling section of the rubric (F5-C1). -->
+### Purpose
 
-| Tool | Failure mode | Agent response |
-|------|-------------|----------------|
-| `search_listings` | | |
-| `suggest_outfit` | | |
-| `create_fit_card` | | |
+Uses an LLM to generate outfit suggestions using the selected thrifted item and the user's wardrobe.
 
----
+### Inputs
 
-## Spec Reflection
+* new_item (dict): The selected thrift listing.
+* wardrobe (dict): The user's wardrobe data.
 
-<!-- Answer both questions with at least 2–3 sentences each. -->
+### Output
 
-**One way planning.md helped during implementation:**
-
-**One divergence from your spec, and why:**
+* Returns a string containing one or more outfit suggestions.
+* Returns general styling advice if the wardrobe is empty.
 
 ---
 
-## Where to Start
+## create_fit_card(outfit: str, new_item: dict) -> str
 
-1. **Read `planning.md` and fill it out before writing any code.**
-2. Verify the data loads correctly by running `python utils/data_loader.py`.
-3. Build and test each tool individually before connecting them through your planning loop.
+### Purpose
 
-Your implementation files go in this same directory. There's no required file structure for your agent code — organize it however makes sense for your design.
+Uses an LLM to create a social-media-style caption for the selected outfit.
+
+### Inputs
+
+* outfit (str): Outfit suggestion generated by suggest_outfit().
+* new_item (dict): The selected thrift listing.
+
+### Output
+
+* Returns a caption suitable for Instagram or TikTok.
+* Returns an error message if outfit information is missing.
+
+---
+
+# Planning Loop
+
+The agent starts by creating a session dictionary and parsing the user's query using regular expressions. It extracts the description, size, and maximum price from the query.
+
+The agent then calls search_listings() using the parsed information. If no listings are found, the agent stores an error message in the session and stops the workflow immediately.
+
+If listings are found, the top result is selected and stored in the session. The agent passes this selected item and the user's wardrobe into suggest_outfit(). The resulting outfit suggestion is stored in the session and then passed into create_fit_card() to generate a social media caption.
+
+Once all tools have completed successfully, the session is returned and displayed in the Gradio interface.
+
+---
+
+# State Management
+
+The application uses a session dictionary to manage state throughout the interaction.
+
+The session stores:
+
+* Original query
+* Parsed query values
+* Search results
+* Selected item
+* User wardrobe
+* Outfit suggestion
+* Fit card
+* Error messages
+
+The selected item returned by search_listings() is stored in session["selected_item"] and passed into suggest_outfit(). The outfit suggestion returned by suggest_outfit() is stored in session["outfit_suggestion"] and passed into create_fit_card(). This allows information to move between tools without requiring additional user input.
+
+---
+
+# Interaction Walkthrough
+
+### User Query
+
+"vintage graphic tee under $30"
+
+### Step 1 — Tool Called
+
+**Tool:** search_listings()
+
+**Input:**
+
+* description = "vintage graphic tee"
+* size = None
+* max_price = 30
+
+**Why this tool:**
+The agent first needs to find matching thrift listings.
+
+**Output:**
+A list of matching listings sorted by relevance.
+
+---
+
+### Step 2 — Tool Called
+
+**Tool:** suggest_outfit()
+
+**Input:**
+
+* Selected thrift item
+* User wardrobe
+
+**Why this tool:**
+After selecting the best listing, the agent generates outfit recommendations based on the user's wardrobe.
+
+**Output:**
+One or more outfit suggestions.
+
+---
+
+### Step 3 — Tool Called
+
+**Tool:** create_fit_card()
+
+**Input:**
+
+* Outfit suggestion
+* Selected thrift item
+
+**Why this tool:**
+Creates a shareable caption describing the outfit.
+
+**Output:**
+A social-media-style fit card.
+
+---
+
+### Final Output To User
+
+The user receives:
+
+1. The selected thrift listing.
+2. Outfit recommendations.
+3. A social-media-ready fit card caption.
+
+---
+
+# Error Handling and Fail Points
+
+| Tool            | Failure Mode                          | Agent Response                                                                   |
+| --------------- | ------------------------------------- | -------------------------------------------------------------------------------- |
+| search_listings | No results match the query            | Returns an empty list. The agent stores an error message and stops the workflow. |
+| suggest_outfit  | Wardrobe is empty                     | Generates general styling advice instead of wardrobe-specific outfits.           |
+| create_fit_card | Outfit input is missing or incomplete | Returns a descriptive error message instead of crashing.                         |
+
+---
+
+# Spec Reflection
+
+## One way planning.md helped during implementation
+
+Planning.md helped me organize the project before writing code. Defining the tools, planning loop, and state management ahead of time made it easier to implement each component individually and connect them together later. The planning process also made debugging easier because I could compare the implementation against the original design.
+
+## One divergence from my spec, and why
+
+Originally, I considered using an LLM to parse the user's query. During implementation, I switched to regular expressions because they were faster, simpler, and reliable for extracting sizes and price limits from the provided example queries. This reduced API usage while still meeting the project requirements.
+
+---
+
+# AI Usage
+
+## Example 1
+
+I used ChatGPT and GitHub Copilot to implement search_listings(). I provided the tool specification from planning.md, including the inputs, outputs, and failure behavior. I reviewed the generated code to ensure it filtered listings correctly, ranked results by relevance, and returned an empty list when no matches were found.
+
+## Example 2
+
+I used ChatGPT and GitHub Copilot to implement the planning loop in agent.py. I provided the Planning Loop, State Management, and Architecture sections from planning.md. After the code was generated, I verified that state was stored correctly in the session dictionary and that the workflow stopped early when search_listings() returned no results.
+
+## Example 3
+
+I used ChatGPT throughout development to troubleshoot environment setup, debug API key issues, verify test results, review generated code, and help write project documentation. I compared AI-generated code against the project requirements before using it in the final implementation.
