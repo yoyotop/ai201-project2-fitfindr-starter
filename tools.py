@@ -69,8 +69,44 @@ def search_listings(
 
     Before writing code, fill in the Tool 1 section of planning.md.
     """
-    # Replace this with your implementation
-    return []
+    # Load all listings
+    listings = load_listings()
+    
+    # Filter by max_price if provided
+    if max_price is not None:
+        listings = [lst for lst in listings if lst["price"] <= max_price]
+    
+    # Filter by size if provided (case-insensitive, partial match)
+    if size is not None:
+        size_lower = size.lower()
+        listings = [
+            lst for lst in listings
+            if size_lower in lst["size"].lower()
+        ]
+    
+    # Score each listing by keyword overlap
+    description_words = set(description.lower().split())
+    scored_listings = []
+    
+    for listing in listings:
+        # Combine searchable fields
+        searchable_text = (
+            listing["title"].lower() + " " +
+            listing["description"].lower() + " " +
+            " ".join(listing["style_tags"]).lower()
+        )
+        
+        # Count keyword matches
+        searchable_words = set(searchable_text.split())
+        score = len(description_words & searchable_words)
+        
+        # Keep only listings with score > 0
+        if score > 0:
+            scored_listings.append((listing, score))
+    
+    # Sort by score descending and return listing dicts only
+    scored_listings.sort(key=lambda x: x[1], reverse=True)
+    return [listing for listing, score in scored_listings]
 
 
 # ── Tool 2: suggest_outfit ────────────────────────────────────────────────────
@@ -100,8 +136,70 @@ def suggest_outfit(new_item: dict, wardrobe: dict) -> str:
 
     Before writing code, fill in the Tool 2 section of planning.md.
     """
-    # Replace this with your implementation
-    return ""
+    try:
+        client = _get_groq_client()
+        
+        # Check if wardrobe items list is empty
+        wardrobe_items = wardrobe.get("items", [])
+        
+        if not wardrobe_items:
+            # Generate general styling advice
+            prompt = f"""
+You are a fashion styling assistant. A user is considering buying this thrifted item:
+
+Title: {new_item.get('title', 'Unknown')}
+Description: {new_item.get('description', '')}
+Category: {new_item.get('category', 'Unknown')}
+Style Tags: {', '.join(new_item.get('style_tags', []))}
+Size: {new_item.get('size', 'Unknown')}
+Colors: {', '.join(new_item.get('colors', []))}
+Price: ${new_item.get('price', 0):.2f}
+
+Their wardrobe is currently empty. Provide general styling advice for this item. Explain:
+- What types of pants, shoes, layers, and accessories pair well with it
+- The vibe and occasions this item suits
+- General styling tips to make this item work in multiple outfits
+
+Keep the response warm, encouraging, and helpful.
+"""
+        else:
+            # Format wardrobe items for the prompt
+            wardrobe_text = "\n".join([
+                f"- {item.get('name', 'Item')}: {item.get('description', '')} ({item.get('category', 'Unknown')})"
+                for item in wardrobe_items
+            ])
+            
+            prompt = f"""
+You are a fashion styling assistant. A user is considering buying this thrifted item:
+
+Title: {new_item.get('title', 'Unknown')}
+Description: {new_item.get('description', '')}
+Category: {new_item.get('category', 'Unknown')}
+Style Tags: {', '.join(new_item.get('style_tags', []))}
+Size: {new_item.get('size', 'Unknown')}
+Colors: {', '.join(new_item.get('colors', []))}
+Price: ${new_item.get('price', 0):.2f}
+
+Their current wardrobe contains:
+{wardrobe_text}
+
+Suggest 1–2 complete outfits using this new item combined with pieces from their existing wardrobe.
+Mention specific pieces by name from their wardrobe. Be specific and creative.
+Keep the response warm, enthusiastic, and practical.
+"""
+        
+        message = client.chat.completions.create(
+            model="llama-3.3-70b-versatile",
+            messages=[
+                {"role": "user", "content": prompt}
+            ],
+            temperature=0.7,
+        )
+        
+        return message.choices[0].message.content.strip()
+    
+    except Exception as e:
+        return f"Sorry, I couldn't generate outfit suggestions right now. Error: {str(e)}"
 
 
 # ── Tool 3: create_fit_card ───────────────────────────────────────────────────
@@ -133,5 +231,48 @@ def create_fit_card(outfit: str, new_item: dict) -> str:
 
     Before writing code, fill in the Tool 3 section of planning.md.
     """
-    # Replace this with your implementation
-    return ""
+    # Guard against empty or whitespace-only outfit
+    if not outfit or not outfit.strip():
+        return "Unable to generate fit card because outfit information is missing."
+    
+    try:
+        client = _get_groq_client()
+        
+        item_title = new_item.get('title', 'thrifted piece')
+        item_price = new_item.get('price', 0)
+        item_platform = new_item.get('platform', 'thrift')
+        
+        prompt = f"""
+You are a fashion social media expert. Generate a casual, authentic Instagram/TikTok style OOTD (Outfit of the Day) caption.
+
+Item Details:
+- Title: {item_title}
+- Price: ${item_price:.2f}
+- Platform: {item_platform}
+- Category: {new_item.get('category', 'unknown')}
+- Style Tags: {', '.join(new_item.get('style_tags', []))}
+
+Outfit Suggestion:
+{outfit}
+
+Write a 2–4 sentence caption that:
+- Feels casual and authentic (like a real person sharing their outfit, not a product description)
+- Mentions the item title, price, and platform naturally, once each
+- Captures the outfit vibe in specific, vivid terms
+- Sounds conversational and engaging
+
+Caption:
+"""
+        
+        message = client.chat.completions.create(
+            model="llama-3.3-70b-versatile",
+            messages=[
+                {"role": "user", "content": prompt}
+            ],
+            temperature=0.9,
+        )
+        
+        return message.choices[0].message.content.strip()
+    
+    except Exception as e:
+        return f"Sorry, I couldn't generate a fit card right now. Error: {str(e)}"

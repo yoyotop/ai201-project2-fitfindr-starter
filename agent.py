@@ -92,10 +92,77 @@ def run_agent(query: str, wardrobe: dict) -> dict:
     Before writing code, complete the Planning Loop and State Management sections
     of planning.md — your implementation should match what you described there.
     """
-    # TODO: implement the planning loop
-    session = _new_session(query, wardrobe)
-    session["error"] = "Planning loop not yet implemented."
-    return session
+    import re
+    
+    try:
+        # Step 1: Initialize session
+        session = _new_session(query, wardrobe)
+        
+        # Step 2: Parse the query using regex
+        parsed_query = query
+        
+        # Extract max_price (patterns: "under $30", "under 30", "less than $30")
+        max_price = None
+        price_match = re.search(r'(?:under|less than)\s*\$?(\d+(?:\.\d{2})?)', parsed_query, re.IGNORECASE)
+        if price_match:
+            max_price = float(price_match.group(1))
+            parsed_query = re.sub(r'(?:under|less than)\s*\$?(\d+(?:\.\d{2})?)', '', parsed_query, flags=re.IGNORECASE)
+        
+        # Extract size (XXS, XS, S, M, L, XL, XXL)
+        size = None
+        size_match = re.search(r'\b(XXS|XS|S|M|L|XL|XXL)\b', parsed_query, re.IGNORECASE)
+        if size_match:
+            size = size_match.group(1).upper()
+            parsed_query = re.sub(r'\b(XXS|XS|S|M|L|XL|XXL)\b', '', parsed_query, flags=re.IGNORECASE)
+        
+        # Remaining text is the description
+        description = parsed_query.strip()
+        # Clean up extra whitespace
+        description = re.sub(r'\s+', ' ', description)
+        
+        session["parsed"] = {
+            "description": description,
+            "size": size,
+            "max_price": max_price,
+        }
+        
+        # Step 3: Call search_listings() and store results
+        search_results = search_listings(
+            description=description,
+            size=size,
+            max_price=max_price,
+        )
+        session["search_results"] = search_results
+        
+        # If no results, set error and return early
+        if not search_results:
+            session["error"] = "No items found matching your criteria. Try adjusting your search terms or price range."
+            return session
+        
+        # Step 4: Select the top result
+        session["selected_item"] = search_results[0]
+        
+        # Step 5: Call suggest_outfit()
+        outfit_suggestion = suggest_outfit(
+            new_item=session["selected_item"],
+            wardrobe=wardrobe,
+        )
+        session["outfit_suggestion"] = outfit_suggestion
+        
+        # Step 6: Call create_fit_card()
+        fit_card = create_fit_card(
+            outfit=outfit_suggestion,
+            new_item=session["selected_item"],
+        )
+        session["fit_card"] = fit_card
+        
+        # Step 7: Return the session
+        return session
+    
+    except Exception as e:
+        session = _new_session(query, wardrobe)
+        session["error"] = f"An unexpected error occurred: {str(e)}"
+        return session
 
 
 # ── CLI test ──────────────────────────────────────────────────────────────────
